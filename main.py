@@ -458,12 +458,34 @@ def get_balances(
         models.GroupMembership.group_id == group_id,
         models.GroupMembership.user_id == current_user.id
     ).first()
-    
     if not membership:
         raise HTTPException(status_code=403, detail="Not a member of this group")
-    
+
     balances = db.query(models.Balance).filter(models.Balance.group_id == group_id).all()
-    return balances
+
+    # Minimal: fetch users once, build the objects your schema requires
+    user_ids = [b.user_id for b in balances] or [0]
+    users = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(user_ids)).all()}
+
+    result = []
+    for b in balances:
+        u = users.get(b.user_id)
+        # If somehow no user found, you can choose to skip/raise. We'll include a minimal stub.
+        user_payload = {
+            "id": u.id,
+            "email": u.email,
+            "name": u.name,
+            "created_at": (u.created_at.isoformat().replace("+00:00", "Z")
+                           if hasattr(u.created_at, "isoformat") else str(u.created_at)),
+        } if u else {
+            "id": b.user_id, "email": "", "name": "", "created_at": ""
+        }
+        result.append({
+            "user_id": b.user_id,
+            "balance": float(getattr(b, "balance", 0) or 0),  # handle Decimal/None
+            "user": user_payload,
+        })
+    return result
 
 # Audit log endpoints
 @app.get("/api/groups/{group_id}/audit", response_model=List[schemas.AuditLogResponse])
