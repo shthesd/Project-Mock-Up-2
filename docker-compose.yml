@@ -20,7 +20,7 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/expensedb
     depends_on:
